@@ -7,11 +7,14 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 
 const connectDB = require("./config/db");
+const eventRoutes = require("./routes/event.routes");
 
 const app = express();
 
+// Security middleware
 app.use(helmet());
 
+// CORS configuration
 app.use(
   cors({
     origin: process.env.CLIENT_URL || "http://localhost:3000",
@@ -19,9 +22,11 @@ app.use(
   })
 );
 
+// Common middleware
 app.use(express.json());
 app.use(morgan("dev"));
 
+// Root route
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
@@ -29,7 +34,7 @@ app.get("/", (req, res) => {
   });
 });
 
-// MongoDB connection test
+// MongoDB health check
 app.get("/api/health", async (req, res) => {
   try {
     const db = await connectDB();
@@ -51,6 +56,10 @@ app.get("/api/health", async (req, res) => {
   }
 });
 
+// Event routes
+app.use("/api/events", eventRoutes);
+
+// 404 Not Found handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -58,12 +67,13 @@ app.use((req, res) => {
   });
 });
 
+// Global error handler
 app.use((err, req, res, next) => {
-  console.error(err);
+  console.error("Server Error:", err);
 
   res.status(err.status || 500).json({
     success: false,
-    message: "Internal server error",
+    message: err.status ? err.message : "Internal server error",
   });
 });
 
