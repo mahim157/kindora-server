@@ -2,8 +2,8 @@
 const connectDB = require("../config/db");
 const { ObjectId } = require("mongodb");
 
-// Get all comments of an event (Public)
-const getEventComments = async (req, res, next) => {
+// Get all comments for an event (Public)
+const getEventComments = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -16,7 +16,6 @@ const getEventComments = async (req, res, next) => {
 
     const db = await connectDB();
 
-    // Check whether the event exists
     const event = await db.collection("events").findOne({
       _id: new ObjectId(id),
     });
@@ -34,21 +33,27 @@ const getEventComments = async (req, res, next) => {
       .sort({ createdAt: -1 })
       .toArray();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       count: comments.length,
       data: comments,
     });
   } catch (error) {
-    next(error);
+    console.error("Get comments error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load comments.",
+    });
   }
 };
 
-// Add a comment (Joined members only)
-const addEventComment = async (req, res, next) => {
+// Add comment (Only joined members)
+const addEventComment = async (req, res) => {
   try {
     const { id } = req.params;
     const { text } = req.body;
+    const userId = req.user?.id;
 
     if (!ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -57,26 +62,21 @@ const addEventComment = async (req, res, next) => {
       });
     }
 
-    if (
-      typeof text !== "string" ||
-      !text.trim() ||
-      text.trim().length > 1000
-    ) {
-      return res.status(400).json({
+    if (!userId) {
+      return res.status(401).json({
         success: false,
-        message: "Comment must contain 1 to 1000 characters.",
+        message: "Authentication required.",
       });
     }
 
-    if (!req.user?.id) {
-      return res.status(401).json({
+    if (typeof text !== "string" || !text.trim() || text.trim().length > 1000) {
+      return res.status(400).json({
         success: false,
-        message: "Please log in to comment.",
+        message: "Comment must be between 1 and 1000 characters.",
       });
     }
 
     const db = await connectDB();
-
     const eventId = new ObjectId(id);
 
     const event = await db.collection("events").findOne({
@@ -90,10 +90,9 @@ const addEventComment = async (req, res, next) => {
       });
     }
 
-    // Verify that the user has joined this event
     const membership = await db.collection("eventJoins").findOne({
       eventId,
-      userId: req.user.id,
+      userId,
     });
 
     if (!membership) {
@@ -106,48 +105,49 @@ const addEventComment = async (req, res, next) => {
     const comment = {
       eventId,
       text: text.trim(),
-      userId: req.user.id,
+      userId,
       userName: req.user.name || "Community Member",
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
-    const result = await db
-      .collection("eventComments")
-      .insertOne(comment);
+    const result = await db.collection("eventComments").insertOne(comment);
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: "Comment added successfully!",
+      message: "Comment added successfully.",
       data: {
         _id: result.insertedId,
         ...comment,
       },
     });
   } catch (error) {
-    next(error);
+    console.error("Add comment error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to add comment.",
+    });
   }
 };
 
 // Delete own comment
-const deleteEventComment = async (req, res, next) => {
+const deleteEventComment = async (req, res) => {
   try {
     const { id, commentId } = req.params;
+    const userId = req.user?.id;
 
-    if (
-      !ObjectId.isValid(id) ||
-      !ObjectId.isValid(commentId)
-    ) {
+    if (!ObjectId.isValid(id) || !ObjectId.isValid(commentId)) {
       return res.status(400).json({
         success: false,
         message: "Invalid event or comment ID.",
       });
     }
 
-    if (!req.user?.id) {
+    if (!userId) {
       return res.status(401).json({
         success: false,
-        message: "Please log in to delete a comment.",
+        message: "Authentication required.",
       });
     }
 
@@ -156,22 +156,27 @@ const deleteEventComment = async (req, res, next) => {
     const result = await db.collection("eventComments").deleteOne({
       _id: new ObjectId(commentId),
       eventId: new ObjectId(id),
-      userId: req.user.id,
+      userId,
     });
 
     if (result.deletedCount === 0) {
       return res.status(404).json({
         success: false,
-        message: "Comment not found or you cannot delete this comment.",
+        message: "Comment not found or you are not allowed to delete it.",
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: "Comment deleted successfully!",
+      message: "Comment deleted successfully.",
     });
   } catch (error) {
-    next(error);
+    console.error("Delete comment error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete comment.",
+    });
   }
 };
 
@@ -180,3 +185,4 @@ module.exports = {
   addEventComment,
   deleteEventComment,
 };
+
