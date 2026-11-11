@@ -263,7 +263,8 @@ const updateEvent = async (req, res, next) => {
     if (result.matchedCount === 0) {
       return res.status(404).json({
         success: false,
-        message: "Event not found or you are not authorized to update it.",
+        message:
+          "Event not found or you are not authorized to update it.",
       });
     }
 
@@ -303,7 +304,8 @@ const deleteEvent = async (req, res, next) => {
     if (result.deletedCount === 0) {
       return res.status(404).json({
         success: false,
-        message: "Event not found or you are not authorized to delete it.",
+        message:
+          "Event not found or you are not authorized to delete it.",
       });
     }
 
@@ -316,6 +318,145 @@ const deleteEvent = async (req, res, next) => {
   }
 };
 
+// Join an event (Protected)
+const joinEvent = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid event ID.",
+      });
+    }
+
+    if (!req.user?.id || !req.user?.email) {
+      return res.status(401).json({
+        success: false,
+        message: "Please login to join this event.",
+      });
+    }
+
+    const db = await connectDB();
+
+    const eventsCollection = db.collection("events");
+    const joinsCollection = db.collection("eventJoins");
+
+    const event = await eventsCollection.findOne({
+      _id: new ObjectId(id),
+    });
+
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: "Event not found.",
+      });
+    }
+
+    if (new Date(event.eventDate) <= new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: "This event is no longer available for joining.",
+      });
+    }
+
+    // Prevent duplicate joins
+    await joinsCollection.createIndex(
+      { eventId: 1, userId: 1 },
+      { unique: true }
+    );
+
+    const joinData = {
+      eventId: event._id,
+      eventTitle: event.title,
+      eventDate: event.eventDate,
+      eventLocation: event.location,
+      eventType: event.type,
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userName: req.user.name || "",
+      joinedAt: new Date(),
+    };
+
+    await joinsCollection.insertOne(joinData);
+
+    res.status(201).json({
+      success: true,
+      message: "You have successfully joined this event!",
+      data: joinData,
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: "You have already joined this event.",
+      });
+    }
+
+    next(error);
+  }
+};
+
+// Get events joined by the logged-in user (Protected)
+const getJoinedEvents = async (req, res, next) => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Please login to view joined events.",
+      });
+    }
+
+    const db = await connectDB();
+
+    const joinedEvents = await db
+      .collection("eventJoins")
+      .aggregate([
+        {
+          $match: {
+            userId: req.user.id,
+          },
+        },
+        {
+          $lookup: {
+            from: "events",
+            localField: "eventId",
+            foreignField: "_id",
+            as: "event",
+          },
+        },
+        {
+          $unwind: "$event",
+        },
+        {
+          $sort: {
+            "event.eventDate": 1,
+          },
+        },
+        {
+          $replaceRoot: {
+            newRoot: {
+              $mergeObjects: [
+                "$event",
+                { joinedAt: "$joinedAt" },
+              ],
+            },
+          },
+        },
+      ])
+      .toArray();
+
+    res.status(200).json({
+      success: true,
+      count: joinedEvents.length,
+      data: joinedEvents,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Export all controllers
 module.exports = {
   getUpcomingEvents,
   getRecentEvents,
@@ -324,4 +465,6 @@ module.exports = {
   getMyEvents,
   updateEvent,
   deleteEvent,
+  joinEvent,
+  getJoinedEvents,
 };

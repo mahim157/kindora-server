@@ -9,6 +9,8 @@ const {
   getMyEvents,
   updateEvent,
   deleteEvent,
+  joinEvent,
+  getJoinedEvents,
 } = require("../controllers/event.controller");
 
 const authenticate = require("../middleware/auth.middleware");
@@ -21,7 +23,11 @@ router.get("/", getUpcomingEvents);
 
 // Protected routes
 router.get("/mine", authenticate, getMyEvents);
+router.get("/joined", authenticate, getJoinedEvents);
+
 router.post("/", authenticate, createEvent);
+router.post("/:id/join", authenticate, joinEvent);
+
 router.patch("/:id", authenticate, updateEvent);
 router.delete("/:id", authenticate, deleteEvent);
 
