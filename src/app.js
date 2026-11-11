@@ -1,5 +1,4 @@
 
-
 require("dotenv").config();
 
 const express = require("express");
@@ -19,11 +18,14 @@ app.use(helmet());
 const allowedOrigins = [
   "http://localhost:3000",
   "https://kindora-client-git-main-mahim12.vercel.app",
+  "https://kindora-client-psi.vercel.app",
+  "https://kindora-client-qg5osl2qs-mahim12.vercel.app",
   process.env.CLIENT_URL,
 ].filter(Boolean);
 
+// Allow Kindora Vercel deployment URLs
 const vercelPreviewOrigin =
-  /^https:\/\/kindora-client-[a-z0-9]+-mahim12\.vercel\.app$/;
+  /^https:\/\/kindora-client-[a-z0-9-]+\.vercel\.app$/;
 
 app.use(
   cors({
@@ -60,6 +62,7 @@ app.get("/", (req, res) => {
 app.get("/api/health", async (req, res) => {
   try {
     const db = await connectDB();
+
     await db.command({ ping: 1 });
 
     res.status(200).json({
