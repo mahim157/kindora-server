@@ -5,17 +5,27 @@ const {
   getUpcomingEvents,
   getRecentEvents,
   getEventById,
+  createEvent,
+  getMyEvents,
+  updateEvent,
+  deleteEvent,
 } = require("../controllers/event.controller");
+
+const authenticate = require("../middleware/auth.middleware");
 
 const router = express.Router();
 
-// GET /api/events/recent
+// Public routes
 router.get("/recent", getRecentEvents);
-
-// GET /api/events
 router.get("/", getUpcomingEvents);
 
-// GET /api/events/:id
+// Protected routes
+router.get("/mine", authenticate, getMyEvents);
+router.post("/", authenticate, createEvent);
+router.patch("/:id", authenticate, updateEvent);
+router.delete("/:id", authenticate, deleteEvent);
+
+// Public event details
 router.get("/:id", getEventById);
 
 module.exports = router;

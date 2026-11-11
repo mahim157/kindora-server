@@ -15,15 +15,27 @@ const app = express();
 app.use(helmet());
 
 // CORS configuration
+const allowedOrigins = [
+  process.env.CLIENT_URL || "http://localhost:3000",
+];
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    origin: (origin, callback) => {
+      // Allow requests without an Origin header (e.g. server-to-server)
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
   })
 );
 
 // Common middleware
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
 app.use(morgan("dev"));
 
 // Root route
@@ -34,7 +46,7 @@ app.get("/", (req, res) => {
   });
 });
 
-// MongoDB health check
+// API health check
 app.get("/api/health", async (req, res) => {
   try {
     const db = await connectDB();
@@ -59,7 +71,7 @@ app.get("/api/health", async (req, res) => {
 // Event routes
 app.use("/api/events", eventRoutes);
 
-// 404 Not Found handler
+// 404 handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -69,11 +81,14 @@ app.use((req, res) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
-  console.error("Server Error:", err);
+  console.error("Server Error:", err.message);
 
   res.status(err.status || 500).json({
     success: false,
-    message: err.status ? err.message : "Internal server error",
+    message:
+      err.status && err.status < 500
+        ? err.message
+        : "Internal server error",
   });
 });
 
